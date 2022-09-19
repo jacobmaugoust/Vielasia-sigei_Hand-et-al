@@ -1,4 +1,4 @@
-# Supplementary analytical data for the article entitled "A 50-million-year-old, three-dimensionally preserved bat skull supports an early origin for modern echolocation" by Suzanne J. Hand, Jacob Maugoust, Robin M.D. Beck, and Maëva J. Orliac
+## Supplementary analytical data for the article entitled "A 50-million-year-old, three-dimensionally preserved bat skull supports an early origin for modern echolocation" by Suzanne J. Hand, Jacob Maugoust, Robin M.D. Beck, and Maëva J. Orliac
 
 ### This repository is divided in two sections.
 
