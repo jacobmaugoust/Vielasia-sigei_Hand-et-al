@@ -1,0 +1,13 @@
+intercepts	slopes
+bats vs non-bats	0.0247848930482153	0.671774475881894
+echolocating bats vs other mammals	0.0618384242619819	0.999849864791866
+HF-hearing mammals vs other mammals	0.0917915042980417	0.823006584411202
+HF-.and.LF-hearing mammals vs other mammals	0.00852739678220493	0.453546848175668
+whole dataset vs bats	0.123987383852181	0.807683549216286
+whole dataset vs non-bats	0.401049206837153	0.786879232583581
+whole dataset vs echolocating bats	0.248740701433839	0.894131770541828
+whole dataset vs non-echolocating bats	0.414478633701091	0.837595851946122
+whole dataset vs HF-hearing mammals	0.288624392251592	0.952792469687204
+whole dataset vs non-HF-hearing mammals	0.442313657649636	0.842823477052659
+whole dataset vs HF-.and.LF-hearing mammals	0.149412163189122	0.768413515084546
+whole dataset vs non-HF-.and.LF-hearing mammals	0.148918837317351	0.588378553299791

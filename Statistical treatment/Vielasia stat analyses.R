@@ -1,5 +1,7 @@
-setwd("~/")
+setwd("D:/TXT/Work/Recherche/PUBLICATIONS/2023-1 - Hand et al. - Vielase bat/Vielasia-sigei_Hand-et-al/Statistical treatment")
 invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lattice","LOST","MASS","mda","nnet","parallel","phylolm","phytools","scales","sensiPhy","sf","treeio","ULT"), library, character.only = TRUE))
+setwd("../test")
+# load("D:/TXT/Work/Recherche/PUBLICATIONS/2023-1 - Hand et al. - Vielase bat/Vielasia-sigei_Hand-et-al/Statistical treatment/Vielasia stat analyses.RData")
 
 # Custom functions (with additional details in the Supp Data 1 for the align_rep_ppca and conv.pgls in their script part as #comments)
 {
@@ -40,19 +42,53 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
     return(conc.topo)
   }
   
-  Arbour_et_al_treatment<-function(lmk_data,specimen_species,pairs,slides){
+  Arbour_et_al_treatment<-function(lmk_data,specimen_species,pairs,slides,omit.lmk=NA){
     n_specimens<-dim(lmk_data)[1]
     n_lmk<-dim(lmk_data)[2]/3
-    geomorph_lmk<-list()
-    for (i in 1:n_specimens){
-      geomorph_lmk[[i]]<-matrix(nrow=n_lmk,ncol=3,lmk_data[i,],byrow=T)
-    }
-    geomorph_lmk<-array(unlist(geomorph_lmk),dim=c(n_lmk,3,n_specimens))
+    col_lmk<-setNames(c(1:dim(lmk_data)[2]),as.character(rep(c(1:n_lmk),each=3)))
+    geomorph_lmk<-arrayspecs(lmk_data,n_lmk,3,n_specimens)
     
     for (i in 1:n_specimens){
       if(!any(is.na(geomorph_lmk[,,i]))){next}
       else{
         geomorph_lmk[,,i]<-flipped(specimen=geomorph_lmk[,,i],land.pairs=pairs)
+      }
+    }
+    
+    if(!any(is.na(omit.lmk))){
+      col_lmk<-col_lmk[-which(as.numeric(names(col_lmk))%in%omit.lmk)]
+      old_n_lmk<-n_lmk
+      n_lmk<-n_lmk-length(omit.lmk)
+      
+      pairs<-pairs[!apply(apply(pairs,c(1,2),function(x){x%in%omit.lmk}),1,any),]
+      for(i in 1:nrow(pairs)){
+        for(j in 1:ncol(pairs)){
+          pairs[i,j]<-pairs[i,j]-length(which(pairs[i,j]>omit.lmk))
+        }
+      }
+      
+      geomorph_lmk<-arrayspecs(matrix(two.d.array(geomorph_lmk),nrow=n_specimens,ncol=old_n_lmk*3,dimnames = list(rownames(lmk_data),colnames(lmk_data)))[,col_lmk],n_lmk,3,n_specimens)
+      slmk<-setNames(unlist(slides),c(1:length(unlist(slides))))
+      slmk<-sort(slmk)
+      if(any(!omit.lmk%in%slmk)){
+        for(i in 1:length(omit.lmk)){
+          slmk[slmk>omit.lmk[i]]<-slmk[slmk>omit.lmk[i]]-1
+        }
+      }
+      bounds<-c()
+      for(i in 1:length(slides)){
+        bounds[2*i-1]<-ifelse(i==1,0,bounds[2*(i-1)])+1
+        bounds[2*i]<-bounds[2*i-1]+length(slides[[i]])-1
+      }
+      omit.slmk<-slmk[!slmk%in%omit.lmk]
+      omit.slmk[1]<-setNames(slmk[1],omit.slmk[1])
+      for(i in 2:length(omit.slmk)){
+        if((omit.slmk[i]-omit.slmk[i-1])>1){
+          omit.slmk[i:length(omit.slmk)]<-omit.slmk[i:length(omit.slmk)]-1
+        }
+      }
+      for(i in 1:length(slides)){
+        slides[[i]]<-unname(omit.slmk[as.numeric(names(omit.slmk))>=bounds[2*i-1]&as.numeric(names(omit.slmk))<=bounds[2*i]])
       }
     }
     
@@ -273,66 +309,6 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
     }
     names(res)<-ops
     return(res)
-  }
-  
-  Vielasia_graph<-function(x,y,to_rm=NA,groups,Vielasia,cols,Vielasia_col="red",opt,xlab,ylab,cex,new=TRUE,legend=TRUE,leg.pos){
-    x_V<-x[Vielasia]
-    y_V<-y[Vielasia]
-    if(!all(is.na(to_rm))&!all(is.null(to_rm))&all(to_rm!=0)){
-      if(!Vielasia%in%to_rm){
-        to_rm<-c(to_rm,Vielasia)
-      }
-      x<-x[-to_rm]
-      y<-y[-to_rm]
-      groups<-factor(groups[-to_rm])
-    }
-    else{
-      x<-x[-Vielasia]
-      y<-y[-Vielasia]
-    }
-    groups<-factor(groups[-Vielasia])
-    if(opt==0){
-      xlim<-range(x)
-      ylim<-range(y)
-    }
-    if(opt==1|opt==2){
-      if(opt==1){
-        morphospaces<-morphospace(x,y,groups,output=NA)
-      }
-      if(opt==2){
-        morphospaces<-morphospace(x,y,groups,output=NA,smoothing.method="spline")
-      }
-      xlim<-range(na.omit(mapply(function(x){x[,1]},morphospaces)))
-      ylim<-range(na.omit(mapply(function(x){x[,2]},morphospaces)))
-    }
-    par(pty="s")
-    if(new){plot(x,y,xlab=xlab,ylab=ylab,type="n",xlim=xlim,ylim=ylim)}
-    if(missing(cex)){
-      cex<-rep(1,length(x))
-      cex_V<-2
-    }
-    else{
-      cex_V<-cex[Vielasia]
-      cex<-cex[-Vielasia]
-    }
-    for (i in 1:nlevels(groups)){
-      points(x[groups==levels(groups)[i]],y[groups==levels(groups)[i]],pch=21,col=NA,bg=cols[i],cex=cex[groups==levels(groups)[i]])
-      if((opt==1|opt==2)&table(groups)[i]>1){
-        points(rbind(morphospaces[[which(which(table(groups)>1)==i)]],morphospaces[[which(which(table(groups)>1)==i)]][1,]),type="l",lwd=2,col=cols[i])
-      }
-    }
-    points(x_V,y_V,pch=21,col=NA,bg=Vielasia_col,cex=cex_V)
-    if(legend){
-      if(missing(leg.pos)){
-        leg.pos<-c("topleft","topright","bottomleft","bottomright")[which.min(c(
-          length(which(x<mean(xlim)&y>mean(ylim))),
-          length(which(x>mean(xlim)&y>mean(ylim))),
-          length(which(x<mean(xlim)&y<mean(ylim))),
-          length(which(x>mean(xlim)&y<mean(ylim)))))]
-      }
-      legend(leg.pos[1],lwd=2,col=cols,legend=levels(groups),bty="n")
-    }
-    par(pty="m")
   }
   
   tree_phylm_full_results<-function(x,y,xynames,multiphy,models=c("BM", "OUrandomRoot","OUfixedRoot", "lambda", "kappa", "delta", "EB"),output.all.models=TRUE,output="all"){
@@ -847,6 +823,260 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
     }
   }
   
+  # Function to plot groups (morphospaces) of data and to add the Vielasia point, with several graphical options
+  Vielasia_graph<-function(x,y,to_rm=NA,groups,Vielasia,cols,Vielasia_col="red",opt,xlab,ylab,cex,pch=21,new=TRUE,legend=TRUE,leg.pos){
+    x_V<-x[Vielasia]
+    y_V<-y[Vielasia]
+    if(!all(is.na(to_rm))&!all(is.null(to_rm))&all(to_rm!=0)){
+      if(!Vielasia%in%to_rm){
+        to_rm<-c(to_rm,Vielasia)
+      }
+      if(length(pch)==length(x)){
+        pch<-pch[-to_rm]
+      }
+      x<-x[-to_rm]
+      y<-y[-to_rm]
+      if(!is.factor(groups)){
+        groups<-factor(groups[-to_rm])
+      }
+      else{
+        groups<-droplevels(groups[-to_rm])
+      }
+      
+    }
+    else{
+      if(length(pch)==length(x)){
+        pch<-pch[-Vielasia]
+      }
+      x<-x[-Vielasia]
+      y<-y[-Vielasia]
+    }
+    if(!is.factor(groups)){
+      groups<-factor(groups[-Vielasia])
+    }
+    else{
+      groups<-droplevels(groups[-Vielasia])
+    }
+    
+    if(opt==0){
+      xlim<-range(x)
+      ylim<-range(y)
+    }
+    if(opt==1|opt==2){
+      if(opt==1){
+        morphospaces<-morphospace(x,y,groups,output=NA)
+      }
+      if(opt==2){
+        morphospaces<-morphospace(x,y,groups,output=NA,smoothing.method="spline")
+      }
+      xlim<-range(na.omit(mapply(function(x){x[,1]},morphospaces)))
+      ylim<-range(na.omit(mapply(function(x){x[,2]},morphospaces)))
+    }
+    par(pty="s")
+    if(new){plot(x,y,xlab=xlab,ylab=ylab,type="n",xlim=xlim,ylim=ylim)}
+    if(missing(cex)){
+      cex<-rep(1,length(x))
+      cex_V<-2
+    }
+    else{
+      cex_V<-cex[Vielasia]
+      cex<-cex[-Vielasia]
+    }
+    if(length(pch)>1){
+      if(length(pch)==length(x)){
+        pch<-lapply(c(1:nlevels(groups)),function(x){pch[groups==levels(groups)[x]]})
+      }
+      if(!is.list(pch)){
+        pch<-as.list(pch)
+      }
+    }
+    for (i in 1:nlevels(groups)){
+      points(x[groups==levels(groups)[i]],y[groups==levels(groups)[i]],pch=if(length(pch)>1){pch[[i]]}else{pch},col=NA,bg=cols[i],cex=cex[groups==levels(groups)[i]])
+      if((opt==1|opt==2)&table(groups)[i]>1){
+        points(rbind(morphospaces[[which(which(table(groups)>1)==i)]],morphospaces[[which(which(table(groups)>1)==i)]][1,]),type="l",lwd=2,col=cols[i])
+      }
+    }
+    points(x_V,y_V,pch=23,col="black",bg=Vielasia_col,cex=cex_V)
+    # arrows(x0=x_V+ifelse(x_V<mean(xlim),1,-1)*0.125*diff(xlim),
+    #        y0=y_V+ifelse(y_V<mean(ylim),1,-1)*0.125*diff(ylim),
+    #        x1=x_V+ifelse(x_V<mean(xlim),1,-1)*0.025*diff(xlim),
+    #        y1=y_V+ifelse(y_V<mean(ylim),1,-1)*0.025*diff(ylim),
+    #        length=0.1,col=Vielasia_col,lwd = 5)
+    if(legend){
+      if(missing(leg.pos)){
+        leg.pos<-c("topleft","topright","bottomleft","bottomright")[which.min(c(
+          length(which(x<mean(xlim)&y>mean(ylim))),
+          length(which(x>mean(xlim)&y>mean(ylim))),
+          length(which(x<mean(xlim)&y<mean(ylim))),
+          length(which(x>mean(xlim)&y<mean(ylim)))))]
+      }
+      legend(leg.pos[1],lwd=2,col=cols,legend=levels(groups),bty="n")
+    }
+    par(pty="m")
+  }
+  
+  # Compute the average position and the 'full' and '95%' morphospaces (see Data S1 for explanations) for given data.
+  plots.variation<-function(list_data=NA,chull_data=NA,avg_data,data.name="analysis",axes=c(1,2),axes.contrib=c(50,50),axes.sign=c(1,1),morpho.groups,morpho.cols=NA,morpho.pch=21,VIE.col="red",out=FALSE,out.names=NA,single.out=1,return.chull.data=FALSE){
+    get_chulls<-function(list_data,axes){
+      cl<-makeCluster(detectCores()-1)
+      registerDoParallel(cl)
+      chull_full<-foreach(i=1:length(list_data[[1]][,1]),.packages="ULT")%dopar%{
+        x_data<-as.numeric(mapply(function(x){x[i,axes[1]]},list_data))
+        y_data<-as.numeric(mapply(function(x){x[i,axes[2]]},list_data))
+        morphospace(x_data,y_data,output=NA)[[1]]
+      }
+      chull_95<-foreach(i=1:length(list_data[[1]][,1]),.packages=c("ULT","sf"))%dopar%{
+        x_data<-as.numeric(mapply(function(x){x[i,axes[1]]},list_data))
+        y_data<-as.numeric(mapply(function(x){x[i,axes[2]]},list_data))
+        centroid<-st_centroid(st_polygon(list(as.matrix(rbind(chull_full[[i]],chull_full[[i]][1,])))))
+        x_center<-centroid[1]
+        y_center<-centroid[2]
+        each_square_dist<-sqrt((x_data-x_center)^2+(y_data-y_center)^2)
+        kept_ones<-which(each_square_dist<=quantile(each_square_dist,0.95))
+        x_data_95<-x_data[kept_ones]
+        y_data_95<-y_data[kept_ones]
+        morphospace(x_data_95,y_data_95,output=NA)[[1]]
+      }
+      stopCluster(cl)
+      chull_data<-list("full"=chull_full,"95"=chull_95)
+      return(chull_data)
+    }
+    
+    plot_chulls<-function(chull_data,avg_data,data.name,axes,axes.contrib,axes.sign,morpho.groups,morpho.cols,morpho.pch,VIE.col,out,out.names,single.out){
+      xlab<-paste0(data.name," ",axes[1]," (",axes.contrib[1],"%)")
+      ylab<-paste0(data.name," ",axes[2]," (",axes.contrib[2],"%)")
+      
+      chull_data<-lapply(chull_data,function(x){lapply(x,function(y){t(t(as.matrix(y))*axes.sign)})})
+      avg_data<-t(t(as.matrix(avg_data))*axes.sign)
+      
+      par(mar=rep(3,4),mgp=c(2,0.5,0),pty="s")
+      
+      # Plotting "full" and "95%" morphospaces for each individual
+      for(c in 1:2){
+        plot(x=0,y=0,type="n",xlab=xlab,ylab=ylab,xlim=range(unlist(mapply(function(x){x[,1]},chull_data[[c]]))),ylim=range(unlist(mapply(function(x){x[,2]},chull_data[[c]]))))
+        for (i in 1:length(chull_data[[c]])){
+          points(c(chull_data[[c]][[i]][,1],chull_data[[c]][[i]][1,1]),c(chull_data[[c]][[i]][,2],chull_data[[c]][[i]][1,2]),type="l",lwd=1,col=c(morpho.cols,VIE.col)[morpho.groups][i])
+        }
+        for (i in 1:(nlevels(morpho.groups)-1)){
+          morphospace(do.call("rbind",chull_data[[c]][morpho.groups==levels(morpho.groups)[i]]),col=c(morpho.cols)[i],lwd=2,plot.points = FALSE)
+        }
+        morphospace(do.call("rbind",chull_data[[c]][which(names(morpho.groups)=="Vielasia_sigei")]),col=c(VIE.col),lwd=2,plot.points = FALSE)
+      }
+      
+      # Plotting average position of the species
+      
+      Vg.args<-list(x=as.numeric(avg_data[,1]),
+                    y=as.numeric(avg_data[,2]),
+                    Vielasia=which(names(morpho.groups)=="Vielasia_sigei"),
+                    groups = morpho.groups,
+                    cols=c(morpho.cols),
+                    opt=1,
+                    xlab=xlab,
+                    ylab=ylab,
+                    pch=morpho.pch,
+                    legend=FALSE,
+                    Vielasia_col = VIE.col)
+      
+      if(single.out){
+        postscript(out.names[1])
+        do.call("Vielasia_graph",Vg.args)
+        dev.off()
+      }
+      do.call("Vielasia_graph",Vg.args)
+      if(out){
+        dev.off()
+      }
+    }
+    
+    type<-ifelse(length(data.name)>1|length(axes)>2,2,1)
+    
+    if(type==1){
+      if(any(is.na(chull_data))){
+        chull_data<-get_chulls(list_data,axes)
+      }
+      
+      single.out<-ifelse(out,TRUE,FALSE)
+      if(out&&length(out.names)==2){
+        postscript(out.names[2])
+      }
+      par(mfrow=c(1,3))
+      plot_chulls(chull_data,avg_data,data.name,axes,axes.contrib,morpho.groups,morpho.cols,morpho.pch,VIE.col,out,out.names,single.out)
+    }
+    
+    if(type==2){
+      if(length(axes)>2){
+        if(length(axes)==3){
+          if(any(is.na(chull_data))){
+            chull_data_12<-get_chulls(list_data,axes[c(1,2)])
+            chull_data_13<-get_chulls(list_data,axes[c(1,3)])
+            chull_data<-setNames(list(chull_data_12,chull_data_13),c("axes 1 and 2","axes 1 and 3"))
+          }
+          
+          avg_data<-c(list(avg_data[,axes[c(1,2)]]),list(avg_data[,axes[c(1,3)]]))
+          axes<-c(list(axes[c(1,2)]),list(axes[c(1,3)]))
+          axes.contrib<-c(list(axes.contrib[c(1,2)]),list(axes.contrib[c(1,3)]))
+          if(length(axes.sign)==2){
+            axes.sign<-rep(list(axes.sign),2)
+          }
+          else{
+            axes.sign<-c(list(axes.sign[c(1,2)]),list(axes.sign[c(1,3)]))
+          }
+        }
+        if(length(axes)==4){
+          if(any(is.na(chull_data))){
+            chull_data_12<-get_chulls(list_data,axes[c(1,2)])
+            chull_data_34<-get_chulls(list_data,axes[c(3,4)])
+            chull_data<-setNames(list(chull_data_12,chull_data_34),c("axes 1 and 2","axes 3 and 4"))
+          }
+          
+          avg_data<-c(list(avg_data[,axes[c(1,2)]]),list(avg_data[,axes[c(3,4)]]))
+          axes<-c(list(axes[c(1,2)]),list(axes[c(3,4)]))
+          axes.contrib<-c(list(axes.contrib[c(1,2)]),list(axes.contrib[c(3,4)]))
+          if(length(axes.sign)==2){
+            axes.sign<-rep(list(axes.sign),2)
+          }
+          else{
+            axes.sign<-c(list(axes.sign[c(1,2)]),list(axes.sign[c(3,4)]))
+          }
+        }
+        data.name<-rep(data.name,2)
+        morpho.groups<-c(rep(list(morpho.groups),2))
+        morpho.pch<-c(rep(list(morpho.pch),2))
+      }
+      else if(length(data.name)>1){
+        if(any(is.na(chull_data))){
+          chull_data_1<-get_chulls(list_data[[1]],axes)
+          chull_data_2<-get_chulls(list_data[[2]],axes)
+          chull_data<-setNames(list(chull_data_1,chull_data_2),data.name)
+        }
+        else{
+          names(chull_data)<-data.name
+        }
+        
+        avg_data<-lapply(avg_data,function(x){x[,1:2]})
+        axes<-c(list(axes),list(axes))
+        axes.contrib<-lapply(axes.contrib,function(x){x[1:2]})
+        if(length(axes.sign)==2){
+          axes.sign<-rep(list(axes.sign),2)
+        }
+        else{
+          axes.sign<-c(list(axes.sign[c(1,2)]),list(axes.sign[c(3,4)]))
+        }
+      }
+      
+      if(out&&length(out.names)==2){
+        postscript(out.names[2])
+      }
+      par(mfrow=c(2,3))
+      for(d in 1:2){
+        plot_chulls(chull_data[[d]],avg_data[[d]],data.name[d],axes[[d]],axes.contrib[[d]],axes.sign[[d]],morpho.groups[[d]],morpho.cols,morpho.pch[[d]],VIE.col,out=ifelse(d==2,TRUE,FALSE),out.names,single.out=ifelse(d==single.out,TRUE,FALSE))
+      }
+    }
+    
+    if(return.chull.data){
+      return(chull_data)
+    }
+  }
 }
 
 # Functions for phylogenetic flexible discriminant analysis (pFDA) after Schmitz & Motani (2011), retrieved from https://github.com/lschmitz/phylo.fda
@@ -1066,14 +1296,14 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
   ###----------------------------------------------------------------------
   ### Main pFDA function with training data only
   ###----------------------------------------------------------------------
-  "phylo.fda" <-function (data,grp,tretre,val=1,treetrans=rescale,
+  "phylo.fda" <-function (data,grp,tretre,val=1,
                           dimension = J - 1, eps = .Machine$double.eps,
                           keep.fitted = (n * dimension < 1000), method=polyreg.modified,intercept=TRUE,eqprior=FALSE,priin=1)
   {
     this.call <- match.call()
     if(intercept) data <- cbind(Intercept=rep(1,nrow(data)),data)
     data <- as.matrix(data)
-    tretre <- treetrans(tretre,"lambda", val)
+    tretre <- geiger:::rescale.phylo(tretre,"lambda", val)
     g <- as.factor(grp)
     ng <- nlevels(g)
     W <- vcv.phylo(tretre)
@@ -1153,7 +1383,7 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
   ### Main pFDA function with training and test data
   ###----------------------------------------------------------------------
   
-  "phylo.fda.pred" <-function (dataA,grpA,taxtaxA,tretreA,testlistn,val=1,treetrans=rescale,
+  "phylo.fda.pred" <-function (dataA,grpA,taxtaxA,tretreA,testlistn,val=1,
                                method=polyreg.modified,
                                eps = .Machine$double.eps, intercept=TRUE,eqprior=FALSE,priin=1,KLD=FALSE,val_k=NULL,val_d=NULL)
   {
@@ -1174,9 +1404,9 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
     ntest <- length(testlist)
     dataA <- as.matrix(dataA)
     if(KLD){ # JM modification : to be able to account for an estimation of kappa, delta, and lambda at the same time, or only lambda (as originally)
-      tretreA<-treetrans(tretreA,"kappa",val_k) # Kappa transformation
+      tretreA<-geiger:::rescale.phylo(tretreA,"kappa",val_k) # Kappa transformation
       
-      tretreA<-treetrans(tretreA,"lambda",val) # Lambda transformation
+      tretreA<-geiger:::rescale.phylo(tretreA,"lambda",val) # Lambda transformation
       
       # Same than geiger:::heights.phylo, but using phytools::nodeHeights, since heights.phylo leads to errors in solving the vcv phylo matrix
       ht<-((max(nodeHeights(tretreA))-nodeHeights(tretreA))[order(tretreA$edge[,2]),])
@@ -1192,7 +1422,7 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
       bl = (ht$a + ht$e)^val_d - ht$a^val_d
       tretreA$edge.length = bl[tretreA$edge[, 2]]
     }
-    else{tretreA <- treetrans(tretreA,"lambda", val)}
+    else{tretreA <- geiger:::rescale.phylo(tretreA,"lambda", val)}
     W <- vcv.phylo(tretreA)
     invW<-solve(W)
     invW.eig <- eigen(invW)
@@ -1288,11 +1518,11 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
   ### Function for optimal lambda value search
   ###----------------------------------------------------------------------
   
-  "phylo.RSS"<-function (datain,grp,tretre,val=1,treetrans=rescale)
+  "phylo.RSS"<-function (datain,grp,tretre,val=1)
   {
     datainO <- as.matrix(datain)
     datainI <- cbind(Intercept=rep(1,nrow(datainO)),datainO)
-    tretre <- treetrans(tretre,"lambda", val)
+    tretre <- geiger:::rescale.phylo(tretre,"lambda", val)
     n <- nrow(datain)
     g <- as.factor(grp)
     ng <- nlevels(g)
@@ -1313,7 +1543,7 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
   
   ##dataA=XA;grpA=gA;taxtaxA=taxaA;tretreA=treA;testlistn=testtaxan;val=0;treetrans=lambdaTree
   
-  "phylo.RSS.pred" <-function (dataA,grpA,taxtaxA,tretreA,testlistn,val=1,treetrans=rescale)
+  "phylo.RSS.pred" <-function (dataA,grpA,taxtaxA,tretreA,testlistn,val=1)
   {
     dataA <- as.data.frame(dataA)
     nA <- nrow(dataA)
@@ -1329,7 +1559,7 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
     icptA <- rep(1,nA)
     dataA <- cbind(icptA,dataA)
     ntest <- length(testlist)
-    tretreA <- treetrans(tretreA,"lambda", val)
+    tretreA <- geiger:::rescale.phylo(tretreA,"lambda", val)
     
     W <- vcv.phylo(tretreA)
     invW<-solve(W)
@@ -1412,6 +1642,24 @@ invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lat
     list(optlambda=optlambda,rslt=rslt)
   }
 }
+
+# Defining colors and symbols
+
+col_HF<-"darkgoldenrod"
+col_LF<-contrasting.palette()[3]
+col_LE<-"blue"
+col_nasal<-"#F67BF6"
+col_oral<-"#8B1EF0"
+col_nonLE<-col_ptero<-"cyan"
+col_nonbat<-"black"
+col_VIE_fig3<-"#F37ECF"
+col_VIE<-"firebrick1"
+pch_nasal<-24
+pch_oral<-25
+pch_nonLE<-pch_yang<-22
+pch_ptero<-25
+pch_rhino<-24
+pch_nonbat<-21
 
 ############### I - PHYLOGENETIC DATA
 ############### I - 1 - This study trees (hereafter called 'our trees')
@@ -1502,7 +1750,7 @@ for (i in 1:length(pruned_trees)){
   temp_ages_AM_phylo<-max(nodeHeights(temp_AM_phylo))-nodeHeights(temp_AM_phylo)
   rescaled_ages_AM_phylo<-scales::rescale(temp_ages_AM_phylo,to=c(min(temp_ages_AM_phylo),crown_bat_age[i]),from=c(min(temp_ages_AM_phylo),max(temp_ages_AM_phylo)))
   temp_AM_phylo$edge.length<-rescaled_ages_AM_phylo[,1]-rescaled_ages_AM_phylo[,2]
-  rescaled_conc_topo_AM[[i]]<-read.tree(text=paste0("(",strsplit(write.tree(temp_AM_phylo),split=";")[[1]],":",stem_bat_node_age[i]-crown_bat_age[i],",Vielasia_sigei:",stem_bat_node_age[i]-stem_bat_tax_age[i],");"))
+  rescaled_conc_topo_AM[[i]]<-read.tree(text=paste0("(",strsplit(write.tree(temp_AM_phylo),split=":0;")[[1]],":",stem_bat_node_age[i]-crown_bat_age[i],",Vielasia_sigei:",stem_bat_node_age[i]-stem_bat_tax_age[i],");"))
 }
 all_conc_SR<-c(conc_topo_SR,rescaled_conc_topo_SR[-which(mapply(function(x){any(x$edge.length==0)},rescaled_conc_topo_SR))])
 all_conc_AM<-c(conc_topo_AM,rescaled_conc_topo_AM[-which(mapply(function(x){any(x$edge.length==0)},rescaled_conc_topo_AM))])
@@ -1575,13 +1823,13 @@ only_echobats<-extract.from.factor(ear_data$Echolocation.call.type,c("Nasal","Or
 reg_echobats<-compare.tree_phylm(x=log(ear_data[,5]),y=log(ear_data[,3]),xynames=ear_data[,2],multiphy=ear_phylo_full,subset=only_echobats,subset.split.name=c("echolocating bats","other mammals"),output=c("red_regs","TT_data","TT","ablines"))
 
 # Fourth, contrasting high-frequency hearing mammals (i.e., echolocating bats + odontocetes) and other mammals
-only_HF<-extract.from.factor(ear_data$Echolocation.call.type,c("Nasal","Oral","HF_cets"),ear_data$Species)
+only_HF<-extract.from.factor(ear_data$Echolocation.call.type,c("Nasal","Oral","HF-cet"),ear_data$Species)
 reg_HF<-compare.tree_phylm(x=log(ear_data[,5]),y=log(ear_data[,3]),xynames=ear_data[,2],multiphy=ear_phylo_full,subset=only_HF,subset.split.name=c("HF-hearing mammals","other mammals"),output=c("red_regs","TT_data","TT","ablines"))
 
 # Fifth, contrasting high- and low-frequency hearing mammals (i.e., mammals with particular acoustic adaptation,
 # namely echolocating bats + cetaceans) and other mammals
-only_HFLF<-extract.from.factor(ear_data$Echolocation.call.type,c("Nasal","Oral","HF_cets","LF_cets"),ear_data$Species)
-reg_HFLF<-compare.tree_phylm(x=log(ear_data[,5]),y=log(ear_data[,3]),xynames=ear_data[,2],multiphy=ear_phylo_full,subset=only_HFLF,subset.split.name=c("HF- and LF-hearing mammals","other mammals"),output=c("red_regs","TT_data","TT","ablines"))
+only_HFLF<-extract.from.factor(ear_data$Echolocation.call.type,c("Nasal","Oral","HF-cet","LF-cet"),ear_data$Species)
+reg_HFLF<-compare.tree_phylm(x=log(ear_data[,5]),y=log(ear_data[,3]),xynames=ear_data[,2],multiphy=ear_phylo_full,subset=only_HFLF,subset.split.name=c("HF-.and.LF-hearing mammals","other mammals"),output=c("red_regs","TT_data","TT","ablines"))
 
 # Summary of the t-tests in each opposition regarding PGLS regression slopes parameters
 groups_PGLS_TT<-rbind(
@@ -1612,30 +1860,38 @@ colnames(groups_PGLS_TT)<-c("intercepts","slopes")
 
 ############### II - 2 - c - Regression graphics with the different groups regression lines
 
-echo_cols<-c("#ADFF30","blue","cyan")
-ear_bat_groups<-ear_data$Suborder[ear_data$Species%in%only_bats]
-ear_bat_groups[ear_bat_groups=="Yangochiroptera"]<-"LE-yan"
-ear_bat_groups[ear_bat_groups=="Yinpterochiroptera"]<-binarize(ear_data$Echolocation.call.type[ear_data$Species%in%only_bats][ear_bat_groups=="Yinpterochiroptera"],zero="Non",output=c("nonLE-yin","LE-yin"))
+echo_pch_reg<-setNames(c(pch_nasal,pch_oral,pch_nonLE),c("Nasal","Oral","Non"))
+ear_bat_groups<-ear_bat_groups<-ear_data$Echolocation.call.type[ear_data$Species%in%only_bats]
 for (i in 1:5){
   if(i==1){
     # postscript("Fig. 3B - Log basilar membrane length (mm) versus log body mass (g) in extant mammals.eps")
+    # postscript("Fig. 3B bis - Log basilar membrane length (mm) versus log body mass (g) in extant mammals.eps")
   }
   if(i==2){
-    # postscript("Fig. S2A - Allometric relationship of log basilar membrane length and log body mass across placental mammals.eps")
+    # postscript("Fig. S3A - Allometric relationship of log basilar membrane length and log body mass across placental mammals.eps")
     par(mfrow=c(2,2),mar=rep(3,4),mgp=c(2,0.5,0))
   }
+  
+  reg_groups_chu<-reg_groups_pch<-as.character(ear_bat_groups)
+  reg_groups_chu[reg_groups_chu%in%c("Nasal","Oral")]<-"LE"
+  reg_groups_chu<-factor(reg_groups_chu,c("LE","Non","unknown"))
+  reg_groups_pch<-factor(reg_groups_pch,c("Nasal","Oral","Non","unknown"))
+  levels(reg_groups_pch)[levels(reg_groups_pch)%in%names(echo_pch_reg)]<-echo_pch_reg[match(levels(reg_groups_pch)[levels(reg_groups_pch)%in%names(echo_pch_reg)],names(echo_pch_reg))]
+  levels(reg_groups_pch)[levels(reg_groups_pch)=="unknown"]<-NA
+  reg_groups_pch<-as.numeric(as.character(reg_groups_pch))
+  
   par(pty="s")
   plot(log(ear_data[,5]),log(ear_data[,3]),xlab="log body mass (g)",ylab="log basilar membrane length (mm)",type="n")
-  points(log(ear_data[!ear_data$Species%in%only_bats,5]),log(ear_data[!ear_data$Species%in%only_bats,3]),pch=21,col=NA,bg="black",cex=ear_data[!ear_data$Species%in%only_bats,4]/2)
-  points(log(ear_data[which(ear_data[,6]=="LF_cets"),5]),log(ear_data[which(ear_data[,6]=="LF_cets"),3]),pch=21,col=NA,bg="lightgrey",cex=ear_data[which(ear_data[,6]=="LF_cets"),4]/2)
-  points(log(ear_data[which(ear_data[,6]=="HF_cets"),5]),log(ear_data[which(ear_data[,6]=="HF_cets"),3]),pch=21,col=NA,bg="darkgray",cex=ear_data[which(ear_data[,6]=="HF_cets"),4]/2)
+  points(log(ear_data[!ear_data$Species%in%only_bats,5]),log(ear_data[!ear_data$Species%in%only_bats,3]),pch=21,col=NA,bg=col_nonbat,cex=ear_data[!ear_data$Species%in%only_bats,4]/2)
+  points(log(ear_data[which(ear_data[,6]=="LF-cet"),5]),log(ear_data[which(ear_data[,6]=="LF-cet"),3]),pch=21,col=NA,bg=col_LF,cex=ear_data[which(ear_data[,6]=="LF-cet"),4]/2)
+  points(log(ear_data[which(ear_data[,6]=="HF-cet"),5]),log(ear_data[which(ear_data[,6]=="HF-cet"),3]),pch=21,col=NA,bg=col_HF,cex=ear_data[which(ear_data[,6]=="HF-cet"),4]/2)
   if(i==1){
     do.call("abline",c(reg_full$ablines,list(lwd=2,col="black")))
     
     reg_PI<-list()
-    for (i in 1:length(ear_phylo_full)){ # Prediction interval using the function gls.pi from evomap, and providing a variance-covariance matrix of the tree taking into account the value of Pagel's delta (the best-fitting model) used for each PGLS
-      curr_phy<-ear_phylo_full[[i]]
-      mod<-reg_full$all_regs$all.results[[which.min(reg_full$red_regs["AIC",])]][[i]]
+    for (j in 1:length(ear_phylo_full)){ # Prediction interval using the function gls.pi from evomap, and providing a variance-covariance matrix of the tree taking into account the value of Pagel's delta (the best-fitting model) used for each PGLS
+      curr_phy<-ear_phylo_full[[j]]
+      mod<-reg_full$all_regs$all.results[[which.min(reg_full$red_regs["AIC",])]][[j]]
       X<-mod$X[,2]
       Y<-mod$y
       val_d<-mod$optpar
@@ -1669,12 +1925,12 @@ for (i in 1:5){
       new_Yhat<-new_X[,2]*mod$coefficients[2]+mod$coefficients[1]
       PI_low <- (new_Yhat - qt(0.975, n) * SEYhat)[order(new_X[,2])]
       PI_up <- (new_Yhat + qt(0.975, n) * SEYhat)[order(new_X[,2])]
-      reg_PI[[i]]<-cbind(sort(new_X[,2]),PI_low,PI_up)
+      reg_PI[[j]]<-cbind(sort(new_X[,2]),PI_low,PI_up)
     }
     avg_PI<-reg_PI[[1]]
-    for(i in 1:nrow(avg_PI)){
-      for(j in 1:ncol(avg_PI)){
-        avg_PI[i,j]<-mean(mapply(function(x){x[i,j]},reg_PI))
+    for(j in 1:nrow(avg_PI)){
+      for(k in 1:ncol(avg_PI)){
+        avg_PI[j,k]<-mean(mapply(function(x){x[j,k]},reg_PI))
       }
     }
     polygon(c(avg_PI[,1],rev(avg_PI[,1])),c(avg_PI[,2],rev(avg_PI[,3])),col=NA,density=-10)
@@ -1696,10 +1952,24 @@ for (i in 1:5){
     for(j in 1:2){do.call("abline",c(reg_HFLF$ablines[[j]],list(lwd=2,col="black",lty=j)))}
     title("HF- and LF-hearing mammals vs others")
   }
-  Vielasia_graph(x=log(ear_data[ear_data$Species%in%only_bats,5]),y=log(ear_data[ear_data$Species%in%only_bats,3]),to_rm=0,groups=ear_bat_groups,Vielasia=which(ear_data[ear_data$Species%in%only_bats,1]=="stem bat"),opt=1,cols=echo_cols,xlab="log body mass",ylab="log basilar membrane length",cex=ear_data[ear_data$Species%in%only_bats,4]/2,new=FALSE,legend=FALSE)
-  par(pty="m")
+  Vielasia_graph(x=log(ear_data[ear_data$Species%in%only_bats,5]),
+                 y=log(ear_data[ear_data$Species%in%only_bats,3]),
+                 to_rm=0,
+                 groups=reg_groups_chu,
+                 Vielasia=which(ear_data[ear_data$Species%in%only_bats,1]=="stem bat"),
+                 opt=1,
+                 cols=c(col_LE,col_nonLE),
+                 xlab="log body mass",
+                 ylab="log basilar membrane length",
+                 cex=ear_data[ear_data$Species%in%only_bats,4]/2,
+                 pch=reg_groups_pch,
+                 new=FALSE,
+                 legend=FALSE,
+                 Vielasia_col = col_VIE_fig3)
+  # points(log(c(16.09,23.71)),rep(log(ear_data[ear_data$Species%in%only_bats,3][which(ear_data[ear_data$Species%in%only_bats,1]=="stem bat")]),2),type="l",pch=21,col="red",bg="red",lwd=3)
   if(i==1|i==5){
     # dev.off()
+    par(pty="m",mfrow=c(1,1),mgp=c(3,1,0),mar=c(5.1,4.1,4.1,2.1))
   }
 }
 
@@ -1715,8 +1985,8 @@ Vielasia_logrbm<-log10(ear_data[ear_data[,2]=="Vielasia_sigei",3]/c(ear_data[ear
 Vielasia_logrbmturns<-log10(ear_data[ear_data[,2]=="Vielasia_sigei",3]*ear_data[ear_data[,2]=="Vielasia_sigei",4])
 
 freqs_Vielasia<-freqs_davies<-matrix(ncol=4,nrow=2)
-colnames(freqs_Vielasia)<-colnames(freqs_davies)<-c("LF(30dB)","LF(60dB)","HF(30dB)","HF(60dB)")
-rownames(freqs_Vielasia)<-rownames(freqs_davies)<-c("full","no bats")
+colnames(freqs_Vielasia)<-colnames(freqs_davies)<-c("Low limit (30dB)","Low limit (60dB)","High limit (30dB)","High limit (60dB)")
+rownames(freqs_Vielasia)<-rownames(freqs_davies)<-c("mammals with bats","mammals without bats")
 
 davies_estimates<-c(11.75,2.45,19.22)
 
@@ -1732,16 +2002,16 @@ for(i in 1:4){
   curr_x_Vielasia<-ifelse(i==1|i==3,Vielasia_logrbm,Vielasia_logrbmturns)
   curr_y_Vielasia<-c(curr_x_Vielasia*coefficients(curr_lm_full)[2]+coefficients(curr_lm_full)[1],
                      curr_x_Vielasia*coefficients(curr_lm_nobats)[2]+coefficients(curr_lm_nobats)[1])
-  points(rep(curr_x_Vielasia,2),curr_y_Vielasia,col="red",bg="red",pch=23,cex=1)
+  points(rep(curr_x_Vielasia,2),curr_y_Vielasia,col=col_VIE,bg=col_VIE,pch=23,cex=1)
   
   curr_x_davies<-log10(davies_estimates[1]*davies_estimates[ifelse(i==1|i==3,3,2)]^(ifelse(i==1|i==3,-1/3,1)))
   curr_y_davies<-c(curr_x_davies*coefficients(curr_lm_full)[2]+coefficients(curr_lm_full)[1],
                    curr_x_davies*coefficients(curr_lm_nobats)[2]+coefficients(curr_lm_nobats)[1])
   segments(curr_x_davies,-10,curr_x_davies,max(curr_y_davies),lty="32")
-  segments(curr_x_Vielasia,-10,curr_x_Vielasia,max(curr_y_Vielasia),lty="32",col="red")
+  segments(curr_x_Vielasia,-10,curr_x_Vielasia,max(curr_y_Vielasia),lty="32",col=col_VIE)
   for(j in 1:2){
     segments(-10,curr_y_davies[j],curr_x_davies,curr_y_davies[j],lty="32")
-    segments(-10,curr_y_Vielasia[j],curr_x_Vielasia,curr_y_Vielasia[j],lty="32",col="red")
+    segments(-10,curr_y_Vielasia[j],curr_x_Vielasia,curr_y_Vielasia[j],lty="32",col=col_VIE)
   }
   
   freqs_Vielasia[,c(3,1,4,2)[i]]<-exp(log(10)*curr_y_Vielasia)
@@ -1749,7 +2019,8 @@ for(i in 1:4){
 }
 # dev.off()
 
-h_estimates<-rbind("average davies estimation"=apply(freqs_davies,2,mean),"average Vielasia estimation"=apply(freqs_Vielasia,2,mean))
+h_estimates<-rbind(freqs_davies,freqs_Vielasia)
+rownames(h_estimates)<-paste0(c(rep("Davies et al. 'bat ancestor'",2),rep("Vielasia sigei",2))," - ",rownames(h_estimates))
 # write.table(h_estimates,file="Table S1L - Limits of hearing frequencies at 30 and 60 dB.txt",append=FALSE,quote=FALSE,sep="\t")
 
 ############### II - 3 - Investigations on the semicircular canals sizes vs cochlea size relationships
@@ -1799,18 +2070,23 @@ bony_lab_bats$Echolocation.call.type<-factor(bony_lab_bats$Echolocation.call.typ
 bony_lab$Echolocation.call.type<-factor(bony_lab$Echolocation.call.type,levels=levels(factor(bony_lab$Echolocation.call.type)))
 bony_lab_bats$SuborderEcho<-mapply(function(x){x[[length(x)]]},strsplit(bony_lab_bats$SuborderEcho,";"))
 bony_lab_bats$SuborderEcho<-factor(bony_lab_bats$SuborderEcho,levels=levels(factor(bony_lab_bats$SuborderEcho))[c(3,4,1,2)])
-echo_cols<-c("#ADFF30","blue","cyan")
 
-# postscript("Fig. 3C - Semicircular canal size relative to body mass in extant bats and in Vielasia.eps")
+# postscript("Fig. 3C - Semicircular canals and cochlea size in extant bats and in Vielasia.eps")
 layout(matrix(ncol=6,nrow=1,c(3,1,1,1,2,3),byrow=TRUE))
 par(pty="m",mar=c(2,5.1,1,5.1),las=1,cex.axis=2)
-boxgroups(bony_lab_bats[,2:4],factor(bony_lab_bats$SuborderEcho),box.width=0.3,points.opt=list("col"=c(echo_cols,"red"),"bg"=c(echo_cols,"red"),"pch"=21,"lwd"=3,cex=2),names=c("ASC","LSC","PSC"),box.opt=list("frame"=FALSE,"yaxt"="n",cex=2))
+
+bp_groups<-as.character(bony_lab_bats$Echolocation.call.type)
+bp_groups[bp_groups%in%c("Nasal","Oral")]<-"LE"
+bp_groups<-factor(bp_groups,c("LE","Non","unknown"))
+
+boxgroups(bony_lab_bats[,2:4],bp_groups,box.width=0.3,points.opt=list("col"=c(col_LE,col_nonLE,col_VIE_fig3),"bg"=c(col_LE,col_nonLE,col_VIE_fig3),"pch"=21,"lwd"=3,cex=2),names=c("ASC","LSC","PSC"),box.opt=list("frame"=FALSE,"yaxt"="n",cex=2))
 axis(2,cex.axis=1)
 axis(2,mean(range(unlist(bony_lab_bats[,2:4]))),labels="Radius",tick=FALSE,cex.axis=2)
 axis(4,mean(range(unlist(bony_lab_bats[,2:4]))),labels="Size",tick=FALSE,hadj=0.25,cex.axis=2)
 par(pty="m",mar=c(2,0.1,1,2.1))
-boxgroups(as.matrix(bony_lab_bats[,5]),factor(bony_lab_bats$SuborderEcho),box.width=0.3,x.gap=c(0.025,0.1),points.opt=list("col"=c(echo_cols,"red"),"bg"=c(echo_cols,"red"),"pch"=21,"lwd"=3,cex=2),names=c("Cochlea"),box.opt=list("frame"=FALSE,"yaxt"="n",cex=2))
+boxgroups(as.matrix(bony_lab_bats[,5]),bp_groups,box.width=0.3,x.gap=c(0.025,0.1),points.opt=list("col"=c(col_LE,col_nonLE,col_VIE_fig3),"bg"=c(col_LE,col_nonLE,col_VIE_fig3),"pch"=21,"lwd"=3,cex=2),names=c("Cochlea"),box.opt=list("frame"=FALSE,"yaxt"="n",cex=2))
 axis(2,at=seq(1,5,1),cex.axis=1)
+par(pty="m",mfrow=c(1,1),mgp=c(3,1,0),mar=c(5.1,4.1,4.1,2.1),cex.axis=1)
 # dev.off()
 
 ############### II - 3 - c - Compute PGLS between each log semicircular canal size and log cochlea size for each 
@@ -1834,7 +2110,6 @@ for (i in 1:length(bony_lab_phylo)){
 
 # Defining ecological groups, based on echolocation call type
 echo_groups<-factor(setNames(bony_lab$Echolocation.call.type,bony_lab$Species))
-echo_cols<-c("#8B1EF0","cyan","#F67BF6")
 
 # Performing the pFDA using the unique PGLS parameters calculated before for each phylogeny
 pfda_optL<-pfda_LSchmitz(lapply(to_use,function(x){x$residuals}),bony_lab_phylo,groups=echo_groups,lambda=lapply(to_use,function(x){round(x$vals["lambda"],5)}),pfda.opt=list(val_k=lapply(to_use,function(x){round(x$vals["kappa"],5)}),val_d=lapply(to_use,function(x){round(x$vals["delta"],5)}),KLD=rep(list(TRUE),length(bony_lab_phylo))))
@@ -1857,8 +2132,8 @@ avg_confusion_all<-as.table(foreach(i=1:dim(avg_confusion_optL)[1],.combine="rbi
 })
 dimnames(avg_confusion_all)<-dimnames(avg_confusion_optL)<-dimnames(avg_confusion_null)<-list("predicted"=levels(factor(bony_lab$Echolocation.call.type))[1:(nlevels(echo_groups)-1)],
                                                                                               "true"=levels(factor(bony_lab$Echolocation.call.type))[1:(nlevels(echo_groups)-1)])
-
-# write.table(avg_confusion_all,file="Table S1I - Average confusion matrix for the performed discriminant analyses for the six placental groups shown.txt",append=FALSE,quote=FALSE,sep="\t")
+export_avg_confusion_all<-apply(avg_confusion_all,c(1,2),function(x){if(any(unlist(strsplit(x," - "))==0)){if(all(unlist(strsplit(x," - "))==0)){paste0("")}else{paste0(unlist(strsplit(x," - "))[unlist(strsplit(x," - "))!=0],ifelse(unlist(strsplit(x," - "))[1]==0," (pFDA)"," (LDA)"))}}else{x}})
+# write.table(export_avg_confusion_all,file="Table S1I - Average confusion matrix for the performed discriminant analyses for the six placental groups shown.txt",append=FALSE,quote=FALSE,sep="\t")
 
 # Contrasting these confusions to a 'no confusion' matrix
 no_confusion<-matrix(nrow=(nlevels(echo_groups)-1),ncol=(nlevels(echo_groups)-1),0)
@@ -1884,125 +2159,62 @@ avg_training.results_null<-as.data.frame(apply(simplify2array(pfda_null$training
 
 # Compute the average discriminant axes scores for the whole dataset and the average percents of explained variance
 avg_DA_scores_optL<-as.data.frame(apply(simplify2array(pfda_optL$DA.scores),c(1,2),averagize))
+avg_DA_scores_optL[,1:4]<-apply(avg_DA_scores_optL[,1:4],2,as.numeric)
 avg_DA_scores_null<-as.data.frame(apply(simplify2array(pfda_null$DA.scores),c(1,2),averagize))
+avg_DA_scores_null[,1:3]<-apply(avg_DA_scores_null[,1:3],2,as.numeric)
 avg_pe_optL<-round(apply(pfda_optL$percent.explained,2,mean),1)
 avg_pe_null<-round(apply(pfda_null$percent.explained,2,mean),1)
 
 ############### II - 3 - f - Get exhaustive information of each species position on the two first discriminant axes
-###############               of each discriminant analysis by computing their 'full' and '95%' morphospaces
+###############               of each discriminant analysis by computing their 'full' and '95%' morphospaces and
+###############               plot them
 
-# For the pFDA
-cl<-makeCluster(detectCores()-1)
-registerDoParallel(cl)
-each_sp_pDA_chull_full<-foreach(i=1:length(avg_DA_scores_optL[,1]),.packages="ULT")%dopar%{
-  x_data<-as.numeric(mapply(function(x){x[i,1]},pfda_optL$DA.scores))
-  y_data<-as.numeric(mapply(function(x){x[i,2]},pfda_optL$DA.scores))
-  morphospace(x_data,y_data,output=NA)[[1]]
-}
-each_sp_pDA_chull_95<-foreach(i=1:length(avg_DA_scores_optL[,1]),.packages=c("ULT","sf"))%dopar%{
-  x_data<-as.numeric(mapply(function(x){x[i,1]},pfda_optL$DA.scores))
-  y_data<-as.numeric(mapply(function(x){x[i,2]},pfda_optL$DA.scores))
-  centroid<-st_centroid(st_polygon(list(as.matrix(rbind(each_sp_pDA_chull_full[[i]],each_sp_pDA_chull_full[[i]][1,])))))
-  x_center<-centroid[1]
-  y_center<-centroid[2]
-  each_square_dist<-sqrt((x_data-x_center)^2+(y_data-y_center)^2)
-  kept_ones<-which(each_square_dist<=quantile(each_square_dist,0.95))
-  x_data_95<-x_data[kept_ones]
-  y_data_95<-y_data[kept_ones]
-  morphospace(x_data_95,y_data_95,output=NA)[[1]]
-}
-stopCluster(cl)
+# Preparing groups and symbols (with LE bats grouped for groups, and Nasal/Oral-emitting bats distinguished by symbol) for both DA
 
-# For the LDA
-cl<-makeCluster(detectCores()-1)
-registerDoParallel(cl)
-each_sp_DA_chull_full<-foreach(i=1:length(avg_DA_scores_null[,1]),.packages="ULT")%dopar%{
-  x_data<-as.numeric(mapply(function(x){x[i,1]},pfda_null$DA.scores))
-  y_data<-as.numeric(mapply(function(x){x[i,2]},pfda_null$DA.scores))
-  morphospace(x_data,y_data,output=NA)[[1]]
-}
-each_sp_DA_chull_95<-foreach(i=1:length(avg_DA_scores_null[,1]),.packages=c("ULT","sf"))%dopar%{
-  x_data<-as.numeric(mapply(function(x){x[i,1]},pfda_null$DA.scores))
-  y_data<-as.numeric(mapply(function(x){x[i,2]},pfda_null$DA.scores))
-  centroid<-st_centroid(st_polygon(list(as.matrix(rbind(each_sp_DA_chull_full[[i]],each_sp_DA_chull_full[[i]][1,])))))
-  x_center<-centroid[1]
-  y_center<-centroid[2]
-  each_square_dist<-sqrt((x_data-x_center)^2+(y_data-y_center)^2)
-  kept_ones<-which(each_square_dist<=quantile(each_square_dist,0.95))
-  x_data_95<-x_data[kept_ones]
-  y_data_95<-y_data[kept_ones]
-  morphospace(x_data_95,y_data_95,output=NA)[[1]]
-}
-stopCluster(cl)
+echo_pch_da<-setNames(c(pch_nonbat,pch_nonbat,pch_nasal,pch_oral,pch_nonLE,pch_nonbat),c("HF-cet","LF-cet","Nasal","Oral","Non","non-bat"))
 
-############### II - 3 - g - Graphics
+lda_groups_chu<-lda_groups_pch<-setNames(as.character(avg_DA_scores_null[,4]),rownames(avg_DA_scores_null))
+lda_groups_chu[lda_groups_chu%in%c("Nasal","Oral")]<-"LE"
+lda_groups_chu<-factor(lda_groups_chu,c("HF-cet","LF-cet","LE","Non","non-bat","unknown"))
 
-temp_echo_cols<-c("darkgrey","lightgrey",echo_cols[1:2],"black",echo_cols[3])
+lda_groups_pch<-factor(lda_groups_pch,c("HF-cet","LF-cet","Nasal","Oral","Non","non-bat","unknown"))
+levels(lda_groups_pch)[levels(lda_groups_pch)%in%names(echo_pch_da)]<-echo_pch_da[match(levels(lda_groups_pch)[levels(lda_groups_pch)%in%names(echo_pch_da)],names(echo_pch_da))]
+levels(lda_groups_pch)[levels(lda_groups_pch)=="unknown"]<-NA
+lda_groups_pch<-as.numeric(as.character(lda_groups_pch))
 
-# postscript("Fig. S3B - Individual variation in the discriminant analyses performed on the PGLS regression residuals.eps")
-par(mfrow=c(2,3),mar=rep(3,4),mgp=c(2,0.5,0))
+pfda_groups_chu<-pfda_groups_pch<-setNames(as.character(avg_DA_scores_optL[,5]),rownames(avg_DA_scores_optL))
+pfda_groups_chu[pfda_groups_chu%in%c("Nasal","Oral")]<-"LE"
+pfda_groups_chu<-factor(pfda_groups_chu,c("HF-cet","LF-cet","LE","Non","non-bat","unknown"))
 
-# Without taking into account phylogeny
-# Plotting 'full morphospaces'
-par(pty="s")
-plot(x=0,y=0,type="n",xlab=paste0("DA 1 (",avg_pe_null[1],"%)"),ylab=paste0("DA 2 (",avg_pe_null[2],"%)"),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_DA_chull_full))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_DA_chull_full))))
-for (i in 1:length(each_sp_DA_chull_full)){
-  points(c(each_sp_DA_chull_full[[i]][,1],each_sp_DA_chull_full[[i]][1,1]),c(each_sp_DA_chull_full[[i]][,2],each_sp_DA_chull_full[[i]][1,2]),type="l",lwd=1,col=c(temp_echo_cols,"red")[factor(avg_DA_scores_null[,4])][i])
-}
-for (i in 1:(nlevels(factor(avg_DA_scores_null[,4]))-1)){
-  morphospace(do.call("rbind",each_sp_DA_chull_full[avg_DA_scores_null[,4]==levels(factor(avg_DA_scores_null[,4]))[i]]),col=c(temp_echo_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_DA_chull_full[rownames(avg_DA_scores_null)=="Vielasia_sigei"]),col=c("red"),lwd=2)
+pfda_groups_pch<-factor(pfda_groups_pch,c("HF-cet","LF-cet","Nasal","Oral","Non","non-bat","unknown"))
+levels(pfda_groups_pch)[levels(pfda_groups_pch)%in%names(echo_pch_da)]<-echo_pch_da[match(levels(pfda_groups_pch)[levels(pfda_groups_pch)%in%names(echo_pch_da)],names(echo_pch_da))]
+levels(pfda_groups_pch)[levels(pfda_groups_pch)=="unknown"]<-NA
+pfda_groups_pch<-as.numeric(as.character(pfda_groups_pch))
 
-# Plotting '95% morphospaces'
-plot(x=0,y=0,type="n",xlab=paste0("DA 1 (",avg_pe_null[1],"%)"),ylab=paste0("DA 2 (",avg_pe_null[2],"%)"),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_DA_chull_95))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_DA_chull_95))))
-for (i in 1:length(each_sp_DA_chull_95)){
-  points(c(each_sp_DA_chull_95[[i]][,1],each_sp_DA_chull_95[[i]][1,1]),c(each_sp_DA_chull_95[[i]][,2],each_sp_DA_chull_95[[i]][1,2]),type="l",lwd=1,col=c(temp_echo_cols,"red")[factor(avg_DA_scores_null[,4])][i])
-}
-for (i in 1:(nlevels(factor(avg_DA_scores_null[,4]))-1)){
-  morphospace(do.call("rbind",each_sp_DA_chull_95[avg_DA_scores_null[,4]==levels(factor(avg_DA_scores_null[,4]))[i]]),col=c(temp_echo_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_DA_chull_95[rownames(avg_DA_scores_null)=="Vielasia_sigei"]),col=c("red"),lwd=2)
+# Running the figures
 
-# Plotting average position of the species on the two first discriminant axes
-# postscript("Fig. 3D - Plot of mammal species including bats on first two axes of linear discriminant analysis (LDA) of PGLS regression residuals.eps")
-Vielasia_graph(as.numeric(avg_DA_scores_null[,1]),as.numeric(avg_DA_scores_null[,2]),Vielasia=which(avg_DA_scores_null$groups=="unknown"),groups = factor(avg_DA_scores_null$groups),cols=c(temp_echo_cols),opt=1,xlab=paste0("DA 1 (",avg_pe_null[1],"%)"),ylab=paste0("DA 2 (",avg_pe_null[2],"%)"),legend=FALSE)
-# dev.off()
+LDA_pFDA_morphospaces<-plots.variation(list_data=list(pfda_null$DA.scores,pfda_optL$DA.scores),
+                                       chull_data = if(exists("LDA_pFDA_morphospaces")){LDA_pFDA_morphospaces}else{NA},
+                                       avg_data=c(list(avg_DA_scores_null),list(avg_DA_scores_optL)),
+                                       data.name=c("DA","pFDA"),
+                                       axes=c(1,2),
+                                       axes.contrib=c(list(avg_pe_null),list(avg_pe_optL)),
+                                       morpho.groups=c(list(lda_groups_chu),list(pfda_groups_chu)),
+                                       morpho.cols=c(col_HF,col_LF,col_LE,col_nonLE,col_nonbat),
+                                       morpho.pch=c(list(lda_groups_pch),list(pfda_groups_pch)),
+                                       VIE.col = col_VIE_fig3,
+                                       return.chull.data=TRUE,out=TRUE,single.out=1,
+                                       out.names=c("Fig. 3D - Plot of mammal species including bats on first two axes of linear discriminant analysis (LDA) of PGLS regression residuals.eps",
+                                                   "Fig. S3B - Individual variation in the discriminant analyses performed on the PGLS regression residuals.eps"))
 
-# Taking into account phylogeny
-# Plotting 'full morphospaces'
-par(pty="s")
-plot(x=0,y=0,type="n",xlab=paste0("pDA 1 (",avg_pe_optL[1],"%)"),ylab=paste0("pDA 2 (",avg_pe_optL[2],"%)"),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_pDA_chull_full))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_pDA_chull_full))))
-for (i in 1:length(each_sp_pDA_chull_full)){
-  points(c(each_sp_pDA_chull_full[[i]][,1],each_sp_pDA_chull_full[[i]][1,1]),c(each_sp_pDA_chull_full[[i]][,2],each_sp_pDA_chull_full[[i]][1,2]),type="l",lwd=1,col=c(temp_echo_cols,"red")[factor(avg_DA_scores_optL[,5])][i])
-}
-for (i in 1:(nlevels(factor(avg_DA_scores_optL[,5]))-1)){
-  morphospace(do.call("rbind",each_sp_pDA_chull_full[avg_DA_scores_optL[,5]==levels(factor(avg_DA_scores_optL[,5]))[i]]),col=c(temp_echo_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_pDA_chull_full[rownames(avg_DA_scores_optL)=="Vielasia_sigei"]),col=c("red"),lwd=2)
-
-# Plotting '95% morphospaces'
-plot(x=0,y=0,type="n",xlab=paste0("pDA 1 (",avg_pe_optL[1],"%)"),ylab=paste0("pDA 2 (",avg_pe_optL[2],"%)"),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_pDA_chull_95))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_pDA_chull_95))))
-for (i in 1:length(each_sp_pDA_chull_95)){
-  points(c(each_sp_pDA_chull_95[[i]][,1],each_sp_pDA_chull_95[[i]][1,1]),c(each_sp_pDA_chull_95[[i]][,2],each_sp_pDA_chull_95[[i]][1,2]),type="l",lwd=1,col=c(temp_echo_cols,"red")[factor(avg_DA_scores_optL[,5])][i])
-}
-for (i in 1:(nlevels(factor(avg_DA_scores_optL[,5]))-1)){
-  morphospace(do.call("rbind",each_sp_pDA_chull_95[avg_DA_scores_optL[,5]==levels(factor(avg_DA_scores_optL[,5]))[i]]),col=c(temp_echo_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_pDA_chull_95[rownames(avg_DA_scores_optL)=="Vielasia_sigei"]),col=c("red"),lwd=2)
-
-# Plotting average position of the species on the two first discriminant axes
-Vielasia_graph(as.numeric(avg_DA_scores_optL[,1]),as.numeric(avg_DA_scores_optL[,2]),Vielasia=which(avg_DA_scores_optL$groups=="unknown"),groups = factor(avg_DA_scores_optL$groups),cols=c(temp_echo_cols),opt=1,xlab=paste0("pDA 1 (",avg_pe_optL[1],"%)"),ylab=paste0("pDA 2 (",avg_pe_optL[2],"%)"),legend=FALSE)
-# dev.off()
-
-############### III - GEOMETRIC MORPHOMETRICS OF SKULL AND MANDIBLE AFTER ARBOUR ET AL. 2019
+############### III - GEOMETRIC MORPHOMETRICS OF CRANIA AND MANDIBLE AFTER ARBOUR ET AL. 2019
 ############### III - 1 - Input, prepare, and treat our perform the Procrustes superimposition following Arbour et al. 2019
 
-# Skull landmarks and sliding semi-landmarks
-lmk_skull<-read.table("8 lmk_skull.txt",header=T,dec=",",sep="\t")
-skull_pairs<-rbind(cbind(c(seq(1,21,2)),c(seq(1,21,2))+1),matrix(ncol=2,nrow=length(c(38:53)),c(38:69),byrow=FALSE))
-skull_slides<-list("1L"=c(27:37),"2L"=c(38:45),"2R"=c(54:61),"3L"=c(46:53),"3R"=c(62:69))
-skull_gpa<-Arbour_et_al_treatment(lmk_skull[,3:dim(lmk_skull)[2]],lmk_skull$Shi.Tree.label,skull_pairs,skull_slides)
+# Crania landmarks and sliding semi-landmarks
+lmk_crania<-read.table("8 lmk_crania.txt",header=T,dec=",",sep="\t")
+crania_pairs<-rbind(cbind(c(seq(1,21,2)),c(seq(1,21,2))+1),matrix(ncol=2,nrow=length(c(38:53)),c(38:69),byrow=FALSE))
+crania_slides<-list("1L"=c(27:37),"2L"=c(38:45),"2R"=c(54:61),"3L"=c(46:53),"3R"=c(62:69))
+crania_gpa<-Arbour_et_al_treatment(lmk_crania[,3:dim(lmk_crania)[2]],lmk_crania$Shi.Tree.label,crania_pairs,crania_slides)
 
 # Mandible landmarks and sliding semi-landmarks
 lmk_mandible<-read.table("9 lmk_mandible.txt",header=T,dec=",",sep="\t")
@@ -2016,9 +2228,9 @@ mandible_gpa<-Arbour_et_al_treatment(lmk_mandible[,3:dim(lmk_mandible)[2]],lmk_m
 
 cl<-makeCluster(detectCores()-1)
 registerDoParallel(cl)
-skull_ppca<-foreach(i=1:length(all_conc_SR),.packages = c("phytools","ape"))%dopar%{
-  skull_keep<-rownames(skull_gpa)[rownames(skull_gpa)%in%all_conc_SR[[i]]$tip.label]
-  phyl.pca(keep.tip(all_conc_SR[[i]],skull_keep),skull_gpa[skull_keep,],method="BM")$S
+crania_ppca<-foreach(i=1:length(all_conc_SR),.packages = c("phytools","ape"))%dopar%{
+  crania_keep<-rownames(crania_gpa)[rownames(crania_gpa)%in%all_conc_SR[[i]]$tip.label]
+  phyl.pca(keep.tip(all_conc_SR[[i]],crania_keep),crania_gpa[crania_keep,],method="BM")$S
 }
 mandible_ppca<-foreach(i=1:length(all_conc_SR),.packages = c("phytools","ape"))%dopar%{
   mandible_keep<-rownames(mandible_gpa)[rownames(mandible_gpa)%in%all_conc_SR[[i]]$tip.label]
@@ -2028,19 +2240,19 @@ stopCluster(cl)
 
 ############### III - 3 - Custom operations on the points resulting from the pPCAs
 
-# 'Realign' points, so that there are no axex inversions throughout the replications (i.e., phylogenies)
-aligned_skull_ppca<-align_rep_ppca(skull_ppca)
+# 'Realign' points, so that there are no axes inversions throughout the replications (i.e., phylogenies)
+aligned_crania_ppca<-align_rep_ppca(crania_ppca)
 aligned_mandible_ppca<-align_rep_ppca(mandible_ppca)
 
 # Get the % of variance explained on each pPCA axis following Arbour et al. 2019 (i.e., % of variance of an axis = R2 explained by the given axis while regressing morphometric data against that axis)
 cl<-makeCluster(detectCores()-1)
 registerDoParallel(cl)
-skull_ppca_R2<-foreach(j=1:length(aligned_skull_ppca),.combine = "rbind",.packages="geomorph")%dopar%{
-  procD.lm(skull_gpa~aligned_skull_ppca[[j]][,1]+
-             aligned_skull_ppca[[j]][,2]+
-             aligned_skull_ppca[[j]][,3]+
-             aligned_skull_ppca[[j]][,4],
-           data=list(skull_gpa,aligned_skull_ppca[[j]][,1:4]))$aov.table[1:4,4]
+crania_ppca_R2<-foreach(j=1:length(aligned_crania_ppca),.combine = "rbind",.packages="geomorph")%dopar%{
+  procD.lm(crania_gpa~aligned_crania_ppca[[j]][,1]+
+             aligned_crania_ppca[[j]][,2]+
+             aligned_crania_ppca[[j]][,3]+
+             aligned_crania_ppca[[j]][,4],
+           data=list(crania_gpa,aligned_crania_ppca[[j]][,1:4]))$aov.table[1:4,4]
 }
 mandible_ppca_R2<-foreach(j=1:length(aligned_mandible_ppca),.combine = "rbind",.packages="geomorph")%dopar%{
   procD.lm(mandible_gpa~aligned_mandible_ppca[[j]][,1]+
@@ -2054,249 +2266,75 @@ stopCluster(cl)
 ############### III - 4 - Get averages of each species position on each axis and of the % of variance explained by each axis
 
 # Get the average value for each species on each pPCA axis. One can also ask for the median, the standard deviation, or the interquartile range by setting c("mean","sd","median","IQR").
-avg_skull_ppca<-rep_ppca_operations(aligned_skull_ppca,"mean")$mean
+avg_crania_ppca<-rep_ppca_operations(aligned_crania_ppca,"mean")$mean
 avg_mandible_ppca<-rep_ppca_operations(aligned_mandible_ppca,"mean")$mean
 
 # Get average % of variance explained
-skull_ppca_R2<-round(100*apply(skull_ppca_R2,2,mean),1)
+crania_ppca_R2<-round(100*apply(crania_ppca_R2,2,mean),1)
 mandible_ppca_R2<-round(100*apply(mandible_ppca_R2,2,mean),1)
 
 ############### III - 5 - Get exhaustive information of each species position by computing their 
-###############          'morphospaces' with 'full' and '95%' morphospaces
-
-# On skull points, on pPC1 and pPC2
-cl<-makeCluster(detectCores()-1)
-registerDoParallel(cl)
-# 'Full morphospaces', i.e. morphospaces for each species on pPC1 and pPC2 considering values for each replication
-each_sp_skull_chull_full_pPC12<-foreach(i=1:length(avg_skull_ppca[,1]),.packages="ULT")%dopar%{
-  x_data<--mapply(function(x){x[i,1]},aligned_skull_ppca)
-  y_data<--mapply(function(x){x[i,2]},aligned_skull_ppca)
-  morphospace(x_data,y_data,output=NA)[[1]]
-}
-# '95% morphospaces', computing the centroid of the 'full' one for each species on pPC1 and pPC2, 
-# then calculating the euclidean distance of each point to that centroid, and retaining the 95% closest points
-each_sp_skull_chull_95_pPC12<-foreach(i=1:length(avg_skull_ppca[,1]),.packages=c("ULT","sf"))%dopar%{
-  x_data<--mapply(function(x){x[i,1]},aligned_skull_ppca)
-  y_data<--mapply(function(x){x[i,2]},aligned_skull_ppca)
-  centroid<-st_centroid(st_polygon(list(as.matrix(rbind(each_sp_skull_chull_full_pPC12[[i]],each_sp_skull_chull_full_pPC12[[i]][1,])))))
-  x_center<-centroid[1]
-  y_center<-centroid[2]
-  each_square_dist<-sqrt((x_data-x_center)^2+(y_data-y_center)^2)
-  kept_ones<-which(each_square_dist<=quantile(each_square_dist,0.95))
-  x_data_95<-x_data[kept_ones]
-  y_data_95<-y_data[kept_ones]
-  morphospace(x_data_95,y_data_95,output=NA)[[1]]
-}
-stopCluster(cl)
-
-# On skull points, on pPC1 and pPC3
-cl<-makeCluster(detectCores()-1)
-registerDoParallel(cl)
-# 'Full morphospaces'
-each_sp_skull_chull_full_pPC13<-foreach(i=1:length(avg_skull_ppca[,1]),.packages="ULT")%dopar%{
-  x_data<--mapply(function(x){x[i,1]},aligned_skull_ppca)
-  y_data<-mapply(function(x){x[i,3]},aligned_skull_ppca)
-  morphospace(x_data,y_data,output=NA)[[1]]
-}
-# '95% morphospaces'
-each_sp_skull_chull_95_pPC13<-foreach(i=1:length(avg_skull_ppca[,1]),.packages=c("ULT","sf"))%dopar%{
-  x_data<--mapply(function(x){x[i,1]},aligned_skull_ppca)
-  y_data<-mapply(function(x){x[i,3]},aligned_skull_ppca)
-  centroid<-st_centroid(st_polygon(list(as.matrix(rbind(each_sp_skull_chull_full_pPC13[[i]],each_sp_skull_chull_full_pPC13[[i]][1,])))))
-  x_center<-centroid[1]
-  y_center<-centroid[2]
-  each_square_dist<-sqrt((x_data-x_center)^2+(y_data-y_center)^2)
-  kept_ones<-which(each_square_dist<=quantile(each_square_dist,0.95))
-  x_data_95<-x_data[kept_ones]
-  y_data_95<-y_data[kept_ones]
-  morphospace(x_data_95,y_data_95,output=NA)[[1]]
-}
-stopCluster(cl)
-
-# On mandible points, on pPC1 and pPC2
-cl<-makeCluster(detectCores()-1)
-registerDoParallel(cl)
-# 'Full morphospaces'
-each_sp_mandible_chull_full_pPC12<-foreach(i=1:length(avg_mandible_ppca[,1]),.packages="ULT")%dopar%{
-  x_data<-mapply(function(x){x[i,1]},aligned_mandible_ppca)
-  y_data<-mapply(function(x){x[i,2]},aligned_mandible_ppca)
-  morphospace(x_data,y_data,output=NA)[[1]]
-}
-# '95% morphospaces'
-each_sp_mandible_chull_95_pPC12<-foreach(i=1:length(avg_mandible_ppca[,1]),.packages=c("ULT","sf"))%dopar%{
-  x_data<-mapply(function(x){x[i,1]},aligned_mandible_ppca)
-  y_data<-mapply(function(x){x[i,2]},aligned_mandible_ppca)
-  centroid<-st_centroid(st_polygon(list(as.matrix(rbind(each_sp_mandible_chull_full_pPC12[[i]],each_sp_mandible_chull_full_pPC12[[i]][1,])))))
-  x_center<-centroid[1]
-  y_center<-centroid[2]
-  each_square_dist<-sqrt((x_data-x_center)^2+(y_data-y_center)^2)
-  kept_ones<-which(each_square_dist<=quantile(each_square_dist,0.95))
-  x_data_95<-x_data[kept_ones]
-  y_data_95<-y_data[kept_ones]
-  morphospace(x_data_95,y_data_95,output=NA)[[1]]
-}
-stopCluster(cl)
-
-# On mandible points, on pPC3 and pPC4
-cl<-makeCluster(detectCores()-1)
-registerDoParallel(cl)
-# 'Full morphospaces'
-each_sp_mandible_chull_full_pPC34<-foreach(i=1:length(avg_mandible_ppca[,1]),.packages="ULT")%dopar%{
-  x_data<--mapply(function(x){x[i,3]},aligned_mandible_ppca)
-  y_data<--mapply(function(x){x[i,4]},aligned_mandible_ppca)
-  morphospace(x_data,y_data,output=NA)[[1]]
-}
-# '95% morphospaces'
-each_sp_mandible_chull_95_pPC34<-foreach(i=1:length(avg_mandible_ppca[,1]),.packages=c("ULT","sf"))%dopar%{
-  x_data<--mapply(function(x){x[i,3]},aligned_mandible_ppca)
-  y_data<--mapply(function(x){x[i,4]},aligned_mandible_ppca)
-  centroid<-st_centroid(st_polygon(list(as.matrix(rbind(each_sp_mandible_chull_full_pPC34[[i]],each_sp_mandible_chull_full_pPC34[[i]][1,])))))
-  x_center<-centroid[1]
-  y_center<-centroid[2]
-  each_square_dist<-sqrt((x_data-x_center)^2+(y_data-y_center)^2)
-  kept_ones<-which(each_square_dist<=quantile(each_square_dist,0.95))
-  x_data_95<-x_data[kept_ones]
-  y_data_95<-y_data[kept_ones]
-  morphospace(x_data_95,y_data_95,output=NA)[[1]]
-}
-stopCluster(cl)
-
-############### III - 6 - Graphics
+###############          'morphospaces' with 'full' and '95%' morphospaces and plot them
 
 # Input ecological information (i.e., diet and echolocation call type) used by Arbour et al. 2019 and define colors
 lmk_eco<-read.table("10 lmk_eco.txt",header=T,dec=",",sep="\t")
 
-skull_species<-rownames(skull_gpa)
-skull_eco<-lmk_eco[which(lmk_eco[,1]%in%skull_species),]
-skull_eco<-skull_eco[match(rownames(avg_skull_ppca),skull_eco[,1]),]
+crania_species<-rownames(crania_gpa)
+crania_eco<-lmk_eco[which(lmk_eco[,1]%in%crania_species),]
+crania_eco<-crania_eco[match(rownames(avg_crania_ppca),crania_eco[,1]),]
 
 mandible_species<-rownames(mandible_gpa)
 mandible_eco<-lmk_eco[which(lmk_eco[,1]%in%mandible_species),]
 mandible_eco<-mandible_eco[match(rownames(avg_mandible_ppca),mandible_eco[,1]),]
 
-echo_cols<-c("#8B1EF0","cyan","#F67BF6")
-diet_cols<-c("#BA9234","#A11174","#007272","#77D377","#76A9CE","#8E2121")
-
-############### III - 6 - a - For skull points
+# For crania points
 # NB: Graphics are displayed to resemble to those of Arbour et al. 2019.
-#     Since on our skull pPCAs, pPC1 and pPC2 are inverted compared to the pPCA of Arbour et al. 2019, we plot opposite 
+#     Since on our crania pPCAs, pPC1 and pPC2 are inverted compared to the pPCA of Arbour et al. 2019, we plot opposite 
 #     values for both axes (i.e., -pPC1 and -pPC2)
+gm_groups_chu<-factor(setNames(crania_eco$Echolocation.Emission.Type,crania_eco$Species),c("Oral","Nasal","Non","unknown"))
 
-# postscript("Fig. S5A - Individual variation in pPCAs performed on cranium dataset.eps")
-par(mfrow=c(2,3),mar=rep(3,4),mgp=c(2,0.5,0))
+echo_pch_gm<-setNames(c(pch_yang,pch_rhino,pch_ptero),c("Yang","Rhino","Ptero"))
 
-# Plot 'full morphospaces' on pPC1 and pPC2
-par(pty="s")
-plot(x=0,y=0,type="n",xlab=paste0("pPC1 (",skull_ppca_R2[1],"%)",collapse=""),ylab=paste0("pPC2 (",skull_ppca_R2[2],"%)",collapse=""),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_skull_chull_full_pPC12))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_skull_chull_full_pPC12))))
-for (i in 1:length(each_sp_skull_chull_full_pPC12)){
-  points(c(each_sp_skull_chull_full_pPC12[[i]][,1],each_sp_skull_chull_full_pPC12[[i]][1,1]),c(each_sp_skull_chull_full_pPC12[[i]][,2],each_sp_skull_chull_full_pPC12[[i]][1,2]),type="l",lwd=1,col=c(echo_cols,"red")[factor(skull_eco[,2])][i])
-}
-for (i in 1:(length(levels(factor(skull_eco[,2])))-1)){
-  morphospace(do.call("rbind",each_sp_skull_chull_full_pPC12[skull_eco[,2]==levels(factor(skull_eco[,2]))[i]]),col=c(echo_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_skull_chull_full_pPC12[skull_species=="Vielasia_sigei"]),col=c("red"),lwd=2)
+gm_groups_pch<-crania_eco$Species
+gm_groups_pch[gm_groups_pch%in%SR_phylo$tip.label[getDescendants(SR_phylo,819)[getDescendants(SR_phylo,819)<=Ntip(SR_phylo)]]]<-"Yang"
+gm_groups_pch[gm_groups_pch%in%SR_phylo$tip.label[getDescendants(SR_phylo,1402)[getDescendants(SR_phylo,1402)<=Ntip(SR_phylo)]]]<-"Rhino"
+gm_groups_pch[gm_groups_pch%in%SR_phylo$tip.label[getDescendants(SR_phylo,1522)[getDescendants(SR_phylo,1522)<=Ntip(SR_phylo)]]]<-"Ptero"
+gm_groups_pch[!gm_groups_pch%in%c("Yang","Rhino","Ptero")]<-"unknown"
+gm_groups_pch<-factor(gm_groups_pch,c("Yang","Rhino","Ptero","unknown"))
+levels(gm_groups_pch)[levels(gm_groups_pch)%in%names(echo_pch_gm)]<-echo_pch_gm[match(levels(gm_groups_pch)[levels(gm_groups_pch)%in%names(echo_pch_gm)],names(echo_pch_gm))]
+levels(gm_groups_pch)[levels(gm_groups_pch)=="unknown"]<-NA
+gm_groups_pch<-as.numeric(as.character(gm_groups_pch))
 
-# Plot '95% morphospaces' on pPC1 and pPC2
-plot(x=0,y=0,type="n",xlab=paste0("pPC1 (",skull_ppca_R2[1],"%)",collapse=""),ylab=paste0("pPC2 (",skull_ppca_R2[2],"%)",collapse=""),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_skull_chull_95_pPC12))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_skull_chull_95_pPC12))))
-for (i in 1:length(each_sp_skull_chull_95_pPC12)){
-  points(c(each_sp_skull_chull_95_pPC12[[i]][,1],each_sp_skull_chull_95_pPC12[[i]][1,1]),c(each_sp_skull_chull_95_pPC12[[i]][,2],each_sp_skull_chull_95_pPC12[[i]][1,2]),type="l",lwd=1,col=c(echo_cols,"red")[factor(skull_eco[,2])][i])
-}
-for (i in 1:(length(levels(factor(skull_eco[,2])))-1)){
-  morphospace(do.call("rbind",each_sp_skull_chull_95_pPC12[skull_eco[,2]==levels(factor(skull_eco[,2]))[i]]),col=c(echo_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_skull_chull_95_pPC12[skull_species=="Vielasia_sigei"]),col=c("red"),lwd=2)
-par(pty="m")
+crania_morphospaces<-plots.variation(list_data=aligned_crania_ppca,
+                                       chull_data = if(exists("crania_morphospaces")){crania_morphospaces}else{NA},
+                                     avg_data=avg_crania_ppca,
+                                     data.name="pPC",
+                                     axes=c(1,2,3),
+                                     axes.contrib=crania_ppca_R2,
+                                     axes.sign=c(-1,-1,1),
+                                     morpho.groups=gm_groups_chu,
+                                     morpho.cols=c(col_oral,col_nasal,col_nonLE),
+                                     morpho.pch=gm_groups_pch,
+                                     VIE.col = col_VIE,
+                                     return.chull.data=TRUE,out=TRUE,single.out=1,
+                                     out.names=c("Fig. 4A - Cranial shape in Vielasia sigei compared with extant bats.eps",
+                                                 "Fig. S5A - Individual variation in pPCAs performed on cranium dataset.eps"))
 
-# Plot average points on pPC1 and pPC2
-# postscript("Fig. 4A - Skull shape in Vielasia sigei compared with extant bats.eps")
-Vielasia_graph(x=-avg_skull_ppca[,1],y=-avg_skull_ppca[,2],to_rm=which(skull_eco[,2]=="unknown"),groups=skull_eco[,2],Vielasia=which(skull_species=="Vielasia_sigei"),opt=1,cols=echo_cols,xlab=paste0("pPC1 (",skull_ppca_R2[1],"%)",collapse=""),ylab=paste0("pPC2 (",skull_ppca_R2[2],"%)",collapse=""),legend=FALSE)
-# dev.off()
+# For mandible points
+# NB: Graphics are displayed to resemble to those of Arbour et al. 2019.
+#     Since on our mandible pPCAs, pPC3 and pPC4 are inverted compared to the pPCA of Arbour et al. 2019, we plot opposite 
+#     values for both axes (i.e., -pPC3 and -pPC4)
 
-# Plot 'full morphospaces' on pPC1 and pPC3
-par(pty="s")
-plot(x=0,y=0,type="n",xlab=paste0("pPC1 (",skull_ppca_R2[1],"%)",collapse=""),ylab=paste0("pPC3 (",skull_ppca_R2[3],"%)",collapse=""),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_skull_chull_full_pPC13))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_skull_chull_full_pPC13))))
-for (i in 1:length(each_sp_skull_chull_full_pPC13)){
-  points(c(each_sp_skull_chull_full_pPC13[[i]][,1],each_sp_skull_chull_full_pPC13[[i]][1,1]),c(each_sp_skull_chull_full_pPC13[[i]][,2],each_sp_skull_chull_full_pPC13[[i]][1,2]),type="l",lwd=1,col=c(echo_cols,"red")[factor(skull_eco[,2])][i])
-}
-for (i in 1:(length(levels(factor(skull_eco[,2])))-1)){
-  morphospace(do.call("rbind",each_sp_skull_chull_full_pPC13[skull_eco[,2]==levels(factor(skull_eco[,2]))[i]]),col=c(echo_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_skull_chull_full_pPC13[skull_species=="Vielasia_sigei"]),col=c("red"),lwd=2)
-
-# Plot '95% morphospaces' on pPC1 and pPC3
-plot(x=0,y=0,type="n",xlab=paste0("pPC1 (",skull_ppca_R2[1],"%)",collapse=""),ylab=paste0("pPC3 (",skull_ppca_R2[3],"%)",collapse=""),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_skull_chull_95_pPC13))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_skull_chull_95_pPC13))))
-for (i in 1:length(each_sp_skull_chull_95_pPC13)){
-  points(c(each_sp_skull_chull_95_pPC13[[i]][,1],each_sp_skull_chull_95_pPC13[[i]][1,1]),c(each_sp_skull_chull_95_pPC13[[i]][,2],each_sp_skull_chull_95_pPC13[[i]][1,2]),type="l",lwd=1,col=c(echo_cols,"red")[factor(skull_eco[,2])][i])
-}
-for (i in 1:(length(levels(factor(skull_eco[,2])))-1)){
-  morphospace(do.call("rbind",each_sp_skull_chull_95_pPC13[skull_eco[,2]==levels(factor(skull_eco[,2]))[i]]),col=c(echo_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_skull_chull_95_pPC13[skull_species=="Vielasia_sigei"]),col=c("red"),lwd=2)
-par(pty="m")
-
-# Plot average points
-Vielasia_graph(x=-avg_skull_ppca[,1],y=avg_skull_ppca[,3],to_rm=which(skull_eco[,2]=="unknown"),groups=skull_eco[,2],Vielasia=which(skull_species=="Vielasia_sigei"),opt=1,cols=echo_cols,xlab=paste0("pPC1 (",skull_ppca_R2[1],"%)",collapse=""),ylab=paste0("pPC3 (",skull_ppca_R2[3],"%)",collapse=""),legend=FALSE)
-# dev.off()
-
-head(names(sort(c((avg_skull_ppca[which(rownames(avg_skull_ppca)!="Vielasia_sigei"),1]-avg_skull_ppca[which(rownames(avg_skull_ppca)=="Vielasia_sigei"),1])^2+(avg_skull_ppca[which(rownames(avg_skull_ppca)!="Vielasia_sigei"),2]-avg_skull_ppca[which(rownames(avg_skull_ppca)=="Vielasia_sigei"),2])^2),decreasing = FALSE)))
-
-############### III - 6 - b - For mandible points
-
-# postscript("Fig. S5B - Individual variation in pPCAs performed on mandible dataset.eps")
-par(mfrow=c(2,3),mar=rep(3,4),mgp=c(2,0.5,0))
-
-# Plot 'full morphospaces' on pPC1 and pPC2
-par(pty="s")
-plot(x=0,y=0,type="n",xlab=paste0("pPC1 (",mandible_ppca_R2[1],"%)",collapse=""),ylab=paste0("pPC2 (",mandible_ppca_R2[2],"%)",collapse=""),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_mandible_chull_full_pPC12))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_mandible_chull_full_pPC12))))
-for (i in 1:length(each_sp_mandible_chull_full_pPC12)){
-  points(c(each_sp_mandible_chull_full_pPC12[[i]][,1],each_sp_mandible_chull_full_pPC12[[i]][1,1]),c(each_sp_mandible_chull_full_pPC12[[i]][,2],each_sp_mandible_chull_full_pPC12[[i]][1,2]),type="l",lwd=1,col=c(diet_cols,"red")[factor(mandible_eco[,3])][i])
-}
-for (i in 1:(length(levels(factor(mandible_eco[,3])))-1)){
-  morphospace(do.call("rbind",each_sp_mandible_chull_full_pPC12[mandible_eco[,3]==levels(factor(mandible_eco[,3]))[i]]),col=c(diet_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_mandible_chull_full_pPC12[mandible_species=="Vielasia_sigei"]),col=c("red"),lwd=2)
-
-# Plot '95% morphospaces' on pPC1 and pPC2
-plot(x=0,y=0,type="n",xlab=paste0("pPC1 (",mandible_ppca_R2[1],"%)",collapse=""),ylab=paste0("pPC2 (",mandible_ppca_R2[2],"%)",collapse=""),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_mandible_chull_95_pPC12))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_mandible_chull_95_pPC12))))
-for (i in 1:length(each_sp_mandible_chull_95_pPC12)){
-  points(c(each_sp_mandible_chull_95_pPC12[[i]][,1],each_sp_mandible_chull_95_pPC12[[i]][1,1]),c(each_sp_mandible_chull_95_pPC12[[i]][,2],each_sp_mandible_chull_95_pPC12[[i]][1,2]),type="l",lwd=1,col=c(diet_cols,"red")[factor(mandible_eco[,3])][i])
-}
-for (i in 1:(length(levels(factor(mandible_eco[,3])))-1)){
-  morphospace(do.call("rbind",each_sp_mandible_chull_95_pPC12[mandible_eco[,3]==levels(factor(mandible_eco[,3]))[i]]),col=c(diet_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_mandible_chull_95_pPC12[mandible_species=="Vielasia_sigei"]),col=c("red"),lwd=2)
-par(pty="m")
-
-# Plot average points on pPC1 and pPC2
-# postscript("Fig. 4B - Mandible shape in Vielasia sigei compared with extant bats.eps")
-Vielasia_graph(x=avg_mandible_ppca[,1],y=avg_mandible_ppca[,2],to_rm=which(mandible_eco[,3]=="unknown"),groups=mandible_eco[,3],Vielasia=which(mandible_species=="Vielasia_sigei"),opt=1,cols=diet_cols,xlab=paste0("pPC1 (",mandible_ppca_R2[1],"%)",collapse=""),ylab=paste0("pPC2 (",mandible_ppca_R2[2],"%)",collapse=""),legend=FALSE)
-# dev.off()
-
-# Plot 'full morphospaces' on pPC3 and pPC4
-par(pty="s")
-plot(x=0,y=0,type="n",xlab=paste0("pPC3 (",mandible_ppca_R2[3],"%)",collapse=""),ylab=paste0("pPC4 (",mandible_ppca_R2[4],"%)",collapse=""),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_mandible_chull_full_pPC34))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_mandible_chull_full_pPC34))))
-for (i in 1:length(each_sp_mandible_chull_full_pPC34)){
-  points(c(each_sp_mandible_chull_full_pPC34[[i]][,1],each_sp_mandible_chull_full_pPC34[[i]][1,1]),c(each_sp_mandible_chull_full_pPC34[[i]][,2],each_sp_mandible_chull_full_pPC34[[i]][1,2]),type="l",lwd=1,col=c(diet_cols,"red")[factor(mandible_eco[,3])][i])
-}
-for (i in 1:(length(levels(factor(mandible_eco[,3])))-1)){
-  morphospace(do.call("rbind",each_sp_mandible_chull_full_pPC34[mandible_eco[,3]==levels(factor(mandible_eco[,3]))[i]]),col=c(diet_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_mandible_chull_full_pPC34[mandible_species=="Vielasia_sigei"]),col=c("red"),lwd=2)
-
-# Plot '95% morphospaces' on pPC3 and pPC4
-plot(x=0,y=0,type="n",xlab=paste0("pPC3 (",mandible_ppca_R2[3],"%)",collapse=""),ylab=paste0("pPC4 (",mandible_ppca_R2[4],"%)",collapse=""),xlim=range(unlist(mapply(function(x){x[,1]},each_sp_mandible_chull_95_pPC34))),ylim=range(unlist(mapply(function(x){x[,2]},each_sp_mandible_chull_95_pPC34))))
-for (i in 1:length(each_sp_mandible_chull_95_pPC34)){
-  points(c(each_sp_mandible_chull_95_pPC34[[i]][,1],each_sp_mandible_chull_95_pPC34[[i]][1,1]),c(each_sp_mandible_chull_95_pPC34[[i]][,2],each_sp_mandible_chull_95_pPC34[[i]][1,2]),type="l",lwd=1,col=c(diet_cols,"red")[factor(mandible_eco[,3])][i])
-}
-for (i in 1:(length(levels(factor(mandible_eco[,3])))-1)){
-  morphospace(do.call("rbind",each_sp_mandible_chull_95_pPC34[mandible_eco[,3]==levels(factor(mandible_eco[,3]))[i]]),col=c(diet_cols)[i],lwd=2)
-}
-morphospace(do.call("rbind",each_sp_mandible_chull_95_pPC34[mandible_species=="Vielasia_sigei"]),col=c("red"),lwd=2)
-par(pty="m")
-
-# Plot average points on pPC3 and pPC4
-Vielasia_graph(x=-avg_mandible_ppca[,3],y=-avg_mandible_ppca[,4],to_rm=which(mandible_eco[,3]=="unknown"),groups=mandible_eco[,3],Vielasia=which(mandible_species=="Vielasia_sigei"),opt=1,cols=diet_cols,xlab=paste0("pPC3 (",mandible_ppca_R2[3],"%)",collapse=""),ylab=paste0("pPC4 (",mandible_ppca_R2[4],"%)",collapse=""),legend=FALSE)
-# dev.off()
-
-head(names(sort(c((avg_mandible_ppca[which(rownames(avg_mandible_ppca)!="Vielasia_sigei"),1]-avg_mandible_ppca[which(rownames(avg_mandible_ppca)=="Vielasia_sigei"),1])^2+(avg_mandible_ppca[which(rownames(avg_mandible_ppca)!="Vielasia_sigei"),2]-avg_mandible_ppca[which(rownames(avg_mandible_ppca)=="Vielasia_sigei"),2])^2),decreasing = FALSE)))
-head(names(sort(c((avg_mandible_ppca[which(rownames(avg_mandible_ppca)!="Vielasia_sigei"),3]-avg_mandible_ppca[which(rownames(avg_mandible_ppca)=="Vielasia_sigei"),3])^2+(avg_mandible_ppca[which(rownames(avg_mandible_ppca)!="Vielasia_sigei"),4]-avg_mandible_ppca[which(rownames(avg_mandible_ppca)=="Vielasia_sigei"),4])^2),decreasing = FALSE)))
+mandible_morphospaces<-plots.variation(list_data=aligned_mandible_ppca,
+                                       chull_data = if(exists("mandible_morphospaces")){mandible_morphospaces}else{NA},
+                                       avg_data=avg_mandible_ppca,
+                                       data.name="pPC",
+                                       axes=c(1,2,3,4),
+                                       axes.contrib=mandible_ppca_R2,
+                                       axes.sign=c(1,1,-1,-1),
+                                       morpho.groups=setNames(factor(mandible_eco$Diet),mandible_eco$Species),
+                                       morpho.cols=c("#BA9234","#A11174","#007272","#77D377","#76A9CE","#8E2121"),
+                                       VIE.col = col_VIE,
+                                       return.chull.data=TRUE,out=TRUE,single.out=1,
+                                       out.names=c("Fig. 4B - Mandible shape in Vielasia sigei compared with extant bats.eps",
+                                                   "Fig. S5B - Individual variation in pPCAs performed on mandible dataset.eps"))

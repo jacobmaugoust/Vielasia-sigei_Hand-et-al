@@ -1,0 +1,7 @@
+HF-cet	LF-cet	Nasal	Non	non-bat	Oral
+HF-cet	12 (LDA)					
+LF-cet	1 (LDA)	3 (LDA)	1 (LDA)			
+Nasal	1 (LDA)	1 (LDA)	9 (LDA)			5 (LDA)
+Non						
+non-bat	14 (pFDA)	7 (pFDA)	1 - 22	5 - 5	49 - 50	1 - 25
+Oral		3 (LDA)	11 (LDA)		1 (LDA)	19 (LDA)
