@@ -1,7 +1,6 @@
-setwd("D:/TXT/Work/Recherche/PUBLICATIONS/2023-1 - Hand et al. - Vielase bat/Vielasia-sigei_Hand-et-al/Statistical treatment")
+setwd("~/Vielasia-sigei_Hand-et-al/Statistical treatment")
 invisible(lapply(c("ape","caper","doParallel","foreach","geiger","geomorph","lattice","LOST","MASS","mda","nnet","parallel","phylolm","phytools","scales","sensiPhy","sf","treeio","ULT"), library, character.only = TRUE))
-setwd("../test")
-# load("D:/TXT/Work/Recherche/PUBLICATIONS/2023-1 - Hand et al. - Vielase bat/Vielasia-sigei_Hand-et-al/Statistical treatment/Vielasia stat analyses.RData")
+# load("Vielasia stat analyses.RData")
 
 # Custom functions (with additional details in the Supp Data 1 for the align_rep_ppca and conv.pgls in their script part as #comments)
 {
